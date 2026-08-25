@@ -24,6 +24,7 @@ async function migrate() {
 const dealSelect = `
   SELECT d.id, m.name AS merchant, d.title, d.detail, d.deal_type AS type,
     d.value::float8 AS value, d.category, d.distance::float8 AS distance,
+    d.latitude, d.longitude,
     d.expiry, d.quantity, d.redeemed, d.is_active AS "isActive"
   FROM deals d JOIN merchants m ON m.id = d.merchant_id`;
 
@@ -54,13 +55,13 @@ app.post("/v1/merchants", asyncRoute(async (req, res) => {
 
 app.post("/v1/deals", asyncRoute(async (req, res) => {
   const owner = userID(req);
-  const { merchant, title, detail, type, value, category, expiry, quantity } = req.body;
+  const { merchant, title, detail, type, value, category, expiry, quantity, latitude, longitude } = req.body;
   if (!owner || !merchant || !title || !detail || !type || !category || !expiry || !quantity) return res.status(400).json({ error: "missing deal fields" });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const merchantResult = await client.query(`INSERT INTO merchants(owner_id,name,attendant_code_hash) VALUES($1,$2,$3) ON CONFLICT(owner_id) DO UPDATE SET name=EXCLUDED.name RETURNING id`, [owner, merchant, hash("1234")]);
-    const result = await client.query(`INSERT INTO deals(merchant_id,title,detail,deal_type,value,category,expiry,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [merchantResult.rows[0].id, title, detail, type, value, category, expiry, quantity]);
+    const result = await client.query(`INSERT INTO deals(merchant_id,title,detail,deal_type,value,category,expiry,quantity,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, [merchantResult.rows[0].id, title, detail, type, value, category, expiry, quantity, latitude || null, longitude || null]);
     await client.query("COMMIT");
     const { rows } = await pool.query(`${dealSelect} WHERE d.id=$1`, [result.rows[0].id]);
     res.status(201).json({ ...rows[0], isOwned: true });
@@ -76,9 +77,9 @@ app.patch("/v1/deals/:id/status", asyncRoute(async (req, res) => {
 
 app.put("/v1/deals/:id", asyncRoute(async (req, res) => {
   const owner = userID(req);
-  const { merchant, title, detail, type, value, category, expiry, quantity } = req.body;
+  const { merchant, title, detail, type, value, category, expiry, quantity, latitude, longitude } = req.body;
   if (!owner || !merchant || !title || !detail || !type || !category || !expiry || !quantity) return res.status(400).json({ error: "missing deal fields" });
-  const result = await pool.query(`UPDATE deals d SET title=$1,detail=$2,deal_type=$3,value=$4,category=$5,expiry=$6,quantity=$7 FROM merchants m WHERE d.id=$8 AND d.merchant_id=m.id AND m.owner_id=$9 RETURNING d.id`, [title, detail, type, value, category, expiry, quantity, req.params.id, owner]);
+  const result = await pool.query(`UPDATE deals d SET title=$1,detail=$2,deal_type=$3,value=$4,category=$5,expiry=$6,quantity=$7,latitude=$8,longitude=$9 FROM merchants m WHERE d.id=$10 AND d.merchant_id=m.id AND m.owner_id=$11 RETURNING d.id`, [title, detail, type, value, category, expiry, quantity, latitude || null, longitude || null, req.params.id, owner]);
   if (!result.rowCount) return res.status(404).json({ error: "deal not found" });
   await pool.query(`UPDATE merchants SET name=$1 WHERE owner_id=$2`, [merchant, owner]);
   const { rows } = await pool.query(`${dealSelect} WHERE d.id=$1 AND m.owner_id=$2`, [req.params.id, owner]);

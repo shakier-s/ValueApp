@@ -37,3 +37,6 @@ CREATE TABLE IF NOT EXISTS vouchers (
 
 CREATE INDEX IF NOT EXISTS deals_active_expiry_idx ON deals(is_active, expiry);
 CREATE INDEX IF NOT EXISTS vouchers_shopper_idx ON vouchers(shopper_id, saved_at DESC);
+
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;

@@ -3,12 +3,15 @@ import SwiftUI
 @main
 struct ValueAppApp: App {
     @StateObject private var store = DealStore()
+    @StateObject private var proximity = ProximityService()
 
     var body: some Scene {
         WindowGroup {
             LaunchFlowView()
                 .environmentObject(store)
+                .environmentObject(proximity)
                 .tint(.valuePurple)
+                .task { proximity.connect(to: store) }
         }
     }
 }

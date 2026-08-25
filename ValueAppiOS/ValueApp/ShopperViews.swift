@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DiscoverView: View {
     @EnvironmentObject private var store: DealStore
+    @EnvironmentObject private var proximity: ProximityService
     @Binding var showingRolePicker: Bool
     @State private var query = ""
     @State private var category = "All"
@@ -25,12 +26,12 @@ struct DiscoverView: View {
         }
         .background(Color.valueCream.ignoresSafeArea())
         .navigationDestination(for: Deal.self) { DealDetailView(deal: $0) }
-        .refreshable { await store.refresh() }
+        .refreshable { await store.refresh(); proximity.evaluateNearbyDeals() }
         .toolbar(.hidden, for: .navigationBar)
     }
     private var header: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 3) { Text("Good deals, nearby").font(.largeTitle.bold()); Label("Johannesburg", systemImage: "location.fill").font(.subheadline).foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 3) { Text("Good deals, nearby").font(.largeTitle.bold()); Button { proximity.enableLocation() } label: { Label(proximity.location == nil ? "Use my location" : "Using your location", systemImage: "location.fill").font(.subheadline).foregroundStyle(.secondary) } }
             Spacer(); Button { showingRolePicker = true } label: { Image(systemName: "storefront.fill").padding(12).background(.white).clipShape(Circle()).shadow(color: .black.opacity(0.08), radius: 8) }.accessibilityLabel("Switch account type")
         }
     }

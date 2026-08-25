@@ -65,10 +65,25 @@ private struct MerchantTabs: View {
 
 private struct ShopperProfile: View {
     @Binding var showingRolePicker: Bool
+    @EnvironmentObject private var proximity: ProximityService
     var body: some View {
         List {
-            Section { Label("ValueApp Shopper", systemImage: "person.crop.circle.fill"); Label("Notifications", systemImage: "bell.fill"); Label("Help & Support", systemImage: "questionmark.circle.fill") }
+            Section { Label("ValueApp Shopper", systemImage: "person.crop.circle.fill") }
+            Section("Location & nearby deals") {
+                Button { proximity.enableLocation() } label: { Label(locationLabel, systemImage: "location.fill") }
+                Toggle("Notify me about nearby deals", isOn: Binding(get: { proximity.alertsEnabled }, set: { enabled in Task { await proximity.setNearbyAlerts(enabled) } }))
+                if proximity.alertsEnabled { VStack(alignment: .leading) { Text("Alert distance: \(Int(proximity.radiusKilometres)) km"); Slider(value: $proximity.radiusKilometres, in: 1...20, step: 1) } }
+                Text("Location and notifications are optional and can be changed in iPhone Settings.").font(.footnote).foregroundStyle(.secondary)
+            }
+            Section { Label("Help & Support", systemImage: "questionmark.circle.fill") }
             Section { Button("Switch to shop owner") { showingRolePicker = true } }
         }.navigationTitle("Profile")
+    }
+    private var locationLabel: String {
+        switch proximity.authorization {
+        case .authorizedAlways, .authorizedWhenInUse: "Location enabled"
+        case .denied, .restricted: "Location access unavailable"
+        default: "Enable location"
+        }
     }
 }

@@ -24,6 +24,8 @@ struct Deal: Identifiable, Codable, Hashable {
     var value: Double
     var category: String
     var distance: Double
+    var latitude: Double? = nil
+    var longitude: Double? = nil
     var expiry: Date
     var quantity: Int
     var redeemed: Int = 0

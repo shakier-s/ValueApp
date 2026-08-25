@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 @MainActor
@@ -24,6 +25,13 @@ final class DealStore: ObservableObject {
 
     func voucher(for deal: Deal) -> Voucher? {
         vouchers.first { $0.dealID == deal.id && $0.status == .saved }
+    }
+
+    func updateDistances(from location: CLLocation) {
+        for index in deals.indices {
+            guard let latitude = deals[index].latitude, let longitude = deals[index].longitude else { continue }
+            deals[index].distance = location.distance(from: CLLocation(latitude: latitude, longitude: longitude)) / 1_000
+        }
     }
 
     @discardableResult
