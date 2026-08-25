@@ -103,6 +103,7 @@ private struct ShopperTabs: View {
         TabView {
             NavigationStack { DiscoverView(showingRolePicker: $showingRolePicker) }.tabItem { Label("Discover", systemImage: "sparkles") }
             NavigationStack { VouchersView() }.tabItem { Label("My Vouchers", systemImage: "ticket.fill") }
+            NavigationStack { RedeemedVouchersView() }.tabItem { Label("Redeemed", systemImage: "checkmark.seal.fill") }
             NavigationStack { ShopperProfile() }.tabItem { Label("Profile", systemImage: "person.fill") }
         }
     }

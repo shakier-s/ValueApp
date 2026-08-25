@@ -91,6 +91,52 @@ struct VouchersView: View {
     }
 }
 
+struct RedeemedVouchersView: View {
+    @EnvironmentObject private var store: DealStore
+
+    private var redeemedVouchers: [Voucher] {
+        store.vouchers
+            .filter { $0.status == .redeemed }
+            .sorted { ($0.redeemedAt ?? $0.savedAt) > ($1.redeemedAt ?? $1.savedAt) }
+    }
+
+    var body: some View {
+        Group {
+            if redeemedVouchers.isEmpty {
+                ContentUnavailableView(
+                    "No redeemed vouchers",
+                    systemImage: "checkmark.seal",
+                    description: Text("Vouchers you redeem will appear here as your personal savings history.")
+                )
+            } else {
+                List(redeemedVouchers) { voucher in
+                    if let deal = store.deals.first(where: { $0.id == voucher.dealID }) {
+                        NavigationLink { VoucherView(voucher: voucher, deal: deal) } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.title2).foregroundStyle(.green)
+                                    .frame(width: 42, height: 42)
+                                    .background(.green.opacity(0.12), in: Circle())
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(deal.title).font(.headline).lineLimit(2)
+                                    Text(deal.merchant).foregroundStyle(.secondary)
+                                    HStack {
+                                        Text(voucher.code).font(.caption.monospaced().bold())
+                                        Spacer()
+                                        Text((voucher.redeemedAt ?? voucher.savedAt).formatted(date: .abbreviated, time: .shortened))
+                                    }.font(.caption).foregroundStyle(.secondary)
+                                }
+                            }.padding(.vertical, 6)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Redeemed")
+        .refreshable { await store.refresh() }
+    }
+}
+
 struct VoucherView: View {
     @EnvironmentObject private var store: DealStore
     let voucher: Voucher
