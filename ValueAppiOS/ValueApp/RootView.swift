@@ -1,17 +1,18 @@
 import SwiftUI
 
 struct RootView: View {
-    @AppStorage("valueapp.role") private var role = "shopper"
+    @AppStorage("valueapp.role") private var role = "guest"
     @State private var showingRolePicker = false
 
     var body: some View {
         Group {
             if role == "merchant" { MerchantTabs(showingRolePicker: $showingRolePicker) }
+            else if role == "guest" { GuestTabs(role: $role, showingRolePicker: $showingRolePicker) }
             else { ShopperTabs(showingRolePicker: $showingRolePicker) }
         }
         .sheet(isPresented: $showingRolePicker) {
             RolePicker(role: $role)
-                .presentationDetents([.height(310)])
+                .presentationDetents([.height(390)])
         }
     }
 }
@@ -26,6 +27,7 @@ private struct RolePicker: View {
             Text("How are you using ValueApp?").font(.title2.bold())
             Text("Switch any time. Your deals and vouchers stay right here.").multilineTextAlignment(.center).foregroundStyle(.secondary)
             HStack(spacing: 12) {
+                roleButton("Browse as guest", icon: "eye.fill", value: "guest")
                 roleButton("Shop deals", icon: "bag.fill", value: "shopper")
                 roleButton("Manage deals", icon: "storefront.fill", value: "merchant")
             }
@@ -38,6 +40,28 @@ private struct RolePicker: View {
                 .background(role == value ? Color.valuePurple : Color.valueCream)
                 .foregroundStyle(role == value ? .white : Color.valuePurple).clipShape(RoundedRectangle(cornerRadius: 18))
         }
+    }
+}
+
+private struct GuestTabs: View {
+    @Binding var role: String
+    @Binding var showingRolePicker: Bool
+    var body: some View {
+        TabView {
+            NavigationStack { DiscoverView(showingRolePicker: $showingRolePicker) }.tabItem { Label("Discover", systemImage: "sparkles") }
+            NavigationStack { GuestProfile(role: $role, showingRolePicker: $showingRolePicker) }.tabItem { Label("Guest", systemImage: "person.crop.circle.dashed") }
+        }
+    }
+}
+
+private struct GuestProfile: View {
+    @Binding var role: String
+    @Binding var showingRolePicker: Bool
+    var body: some View {
+        List {
+            Section { Label("Browsing as guest", systemImage: "eye.fill"); Text("Explore nearby offers without saving vouchers or creating redemption activity.").font(.footnote).foregroundStyle(.secondary) }
+            Section { Button("Continue as a shopper") { role = "shopper" }; Button("Choose another mode") { showingRolePicker = true } }
+        }.navigationTitle("Guest mode")
     }
 }
 
