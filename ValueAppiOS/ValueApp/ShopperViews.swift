@@ -59,10 +59,11 @@ struct DealCard: View {
 
 struct DealDetailView: View {
     @EnvironmentObject private var store: DealStore
-    @AppStorage("valueapp.role") private var role = "guest"
+    @EnvironmentObject private var auth: AuthSession
     let deal: Deal
     @State private var showSaved = false
     @State private var showGuestPrompt = false
+    @State private var showAccountAccess = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -72,10 +73,11 @@ struct DealDetailView: View {
                 Label("Expires \(deal.expiry.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar")
                 Label(String(format: "%.1f km away", deal.distance), systemImage: "location")
                 Label("\(deal.quantity - deal.redeemed) vouchers remaining", systemImage: "ticket")
-                Button { if role == "guest" { showGuestPrompt = true } else { _ = store.save(deal: deal); showSaved = true } } label: { Label(role == "guest" ? "Continue to save voucher" : (store.voucher(for: deal) == nil ? "Save voucher" : "Voucher saved"), systemImage: role == "guest" ? "person.badge.plus" : (store.voucher(for: deal) == nil ? "plus" : "checkmark")).frame(maxWidth: .infinity).padding().background(Color.valuePurple).foregroundStyle(.white).font(.headline).clipShape(RoundedRectangle(cornerRadius: 16)) }.disabled(role != "guest" && store.voucher(for: deal) != nil)
+                Button { if auth.user?.role != .shopper { showGuestPrompt = true } else { _ = store.save(deal: deal); showSaved = true } } label: { Label(auth.user?.role == .shopper ? (store.voucher(for: deal) == nil ? "Save voucher" : "Voucher saved") : "Sign in to save voucher", systemImage: auth.user?.role == .shopper ? (store.voucher(for: deal) == nil ? "plus" : "checkmark") : "person.badge.plus").frame(maxWidth: .infinity).padding().background(Color.valuePurple).foregroundStyle(.white).font(.headline).clipShape(RoundedRectangle(cornerRadius: 16)) }.disabled(auth.user?.role == .shopper && store.voucher(for: deal) != nil)
             }.padding(20)
         }.navigationTitle("Deal").navigationBarTitleDisplayMode(.inline).alert("Voucher saved", isPresented: $showSaved) { Button("Great", role: .cancel) {} } message: { Text("Find it under My Vouchers when you're ready to redeem in store.") }
-        .alert("Continue as a shopper", isPresented: $showGuestPrompt) { Button("Not now", role: .cancel) {}; Button("Continue") { role = "shopper" } } message: { Text("Guest mode is browse-only. Continue as a shopper to save and redeem vouchers.") }
+        .alert("Shopper account required", isPresented: $showGuestPrompt) { Button("Not now", role: .cancel) {}; Button("Sign in") { showAccountAccess = true } } message: { Text("Guest mode is browse-only. Sign in or create a shopper account to save and redeem vouchers.") }
+        .sheet(isPresented: $showAccountAccess) { AccountAccessView().presentationDetents([.large]) }
     }
 }
 

@@ -109,6 +109,11 @@ final class DealStore: ObservableObject {
         } catch { isCloudConnected = false }
     }
 
+    func resetForGuest() {
+        vouchers = []
+        deals.removeAll { $0.isOwned == true }
+    }
+
     private func persist() {
         if let data = try? JSONEncoder().encode(deals) { UserDefaults.standard.set(data, forKey: dealsKey) }
         if let data = try? JSONEncoder().encode(vouchers) { UserDefaults.standard.set(data, forKey: vouchersKey) }

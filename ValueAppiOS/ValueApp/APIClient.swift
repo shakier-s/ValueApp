@@ -4,6 +4,7 @@ actor APIClient {
     static let shared = APIClient()
     private let baseURL = URL(string: "https://valueapp-api-production.up.railway.app")!
     private let userID: String
+    private var authToken: String?
 
     init() {
         let key = "valueapp.cloud.userID"
@@ -16,6 +17,13 @@ actor APIClient {
     }
 
     func deals() async throws -> [Deal] { try await request("/v1/deals") }
+    func setAuthToken(_ token: String?) { authToken = token }
+    func login(email: String, password: String) async throws -> AuthResponse {
+        try await request("/v1/auth/login", method: "POST", body: ["email": email, "password": password])
+    }
+    func register(email: String, password: String, role: AccountRole) async throws -> AuthResponse {
+        try await request("/v1/auth/register", method: "POST", body: ["email": email, "password": password, "role": role.rawValue])
+    }
     func merchantDeals() async throws -> [Deal] { try await request("/v1/merchant/deals") }
     func vouchers() async throws -> [Voucher] { try await request("/v1/vouchers") }
 
@@ -57,8 +65,13 @@ actor APIClient {
         request.httpBody = bodyData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(userID, forHTTPHeaderField: "X-User-ID")
+        if let authToken { request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else { throw URLError(.badServerResponse) }
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard 200..<300 ~= http.statusCode else {
+            let message = (try? JSONDecoder().decode(APIError.self, from: data).message) ?? "Request failed. Please try again."
+            throw APIError(message: message)
+        }
         return try decoder.decode(Response.self, from: data)
     }
 
@@ -73,6 +86,11 @@ actor APIClient {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
+}
+
+struct APIError: Error, Decodable {
+    let message: String
+    private enum CodingKeys: String, CodingKey { case message = "error" }
 }
 
 private struct APIResult: Decodable { let ok: Bool }

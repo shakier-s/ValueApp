@@ -4,12 +4,14 @@ import SwiftUI
 struct ValueAppApp: App {
     @StateObject private var store = DealStore()
     @StateObject private var proximity = ProximityService()
+    @StateObject private var auth = AuthSession()
 
     var body: some Scene {
         WindowGroup {
             LaunchFlowView()
                 .environmentObject(store)
                 .environmentObject(proximity)
+                .environmentObject(auth)
                 .tint(.valuePurple)
                 .preferredColorScheme(.light)
                 .task { proximity.connect(to: store) }
