@@ -25,6 +25,7 @@ struct DiscoverView: View {
         }
         .background(Color.valueCream.ignoresSafeArea())
         .navigationDestination(for: Deal.self) { DealDetailView(deal: $0) }
+        .refreshable { await store.refresh() }
         .toolbar(.hidden, for: .navigationBar)
     }
     private var header: some View {

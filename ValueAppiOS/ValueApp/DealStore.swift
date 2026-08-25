@@ -5,6 +5,7 @@ final class DealStore: ObservableObject {
     @Published var deals: [Deal] = [] { didSet { persist() } }
     @Published var vouchers: [Voucher] = [] { didSet { persist() } }
     @Published var favourites = Set<UUID>()
+    @Published private(set) var isCloudConnected = false
 
     private let dealsKey = "valueapp.deals.v2"
     private let vouchersKey = "valueapp.vouchers.v2"
@@ -15,6 +16,7 @@ final class DealStore: ObservableObject {
         else { deals = Self.samples }
         if let data = UserDefaults.standard.data(forKey: vouchersKey),
            let saved = try? JSONDecoder().decode([Voucher].self, from: data) { vouchers = saved }
+        Task { await refresh() }
     }
 
     var activeDeals: [Deal] { deals.filter { $0.isActive && $0.expiry > .now && $0.redeemed < $0.quantity } }
@@ -29,6 +31,13 @@ final class DealStore: ObservableObject {
         let code = String(format: "VAL-%04d", Int.random(in: 1000...9999))
         let voucher = Voucher(dealID: deal.id, code: code, savedAt: .now)
         vouchers.insert(voucher, at: 0)
+        Task {
+            if let cloudVoucher = try? await APIClient.shared.saveVoucher(dealID: deal.id),
+               let index = vouchers.firstIndex(where: { $0.dealID == deal.id && $0.status == .saved }) {
+                vouchers[index] = cloudVoucher
+                isCloudConnected = true
+            }
+        }
         return voucher
     }
 
@@ -38,13 +47,39 @@ final class DealStore: ObservableObject {
         vouchers[index].status = .redeemed
         vouchers[index].redeemedAt = .now
         if let dealIndex = deals.firstIndex(where: { $0.id == vouchers[index].dealID }) { deals[dealIndex].redeemed += 1 }
+        Task {
+            do { try await APIClient.shared.redeem(voucherID: voucherID, attendantCode: attendantCode); isCloudConnected = true }
+            catch { await refresh() }
+        }
         return true
     }
 
-    func create(_ deal: Deal) { deals.insert(deal, at: 0) }
+    func create(_ deal: Deal) {
+        deals.insert(deal, at: 0)
+        Task {
+            if let cloudDeal = try? await APIClient.shared.createDeal(deal) {
+                deals.removeAll { $0.id == deal.id }
+                deals.insert(cloudDeal, at: 0)
+                isCloudConnected = true
+            }
+        }
+    }
     func toggleActive(_ deal: Deal) {
         guard let index = deals.firstIndex(where: { $0.id == deal.id }) else { return }
         deals[index].isActive.toggle()
+        let active = deals[index].isActive
+        Task { try? await APIClient.shared.setActive(active, dealID: deal.id) }
+    }
+
+    func refresh() async {
+        do {
+            async let cloudDeals = APIClient.shared.deals()
+            async let cloudVouchers = APIClient.shared.vouchers()
+            let (newDeals, newVouchers) = try await (cloudDeals, cloudVouchers)
+            if !newDeals.isEmpty { deals = newDeals }
+            vouchers = newVouchers
+            isCloudConnected = true
+        } catch { isCloudConnected = false }
     }
 
     private func persist() {
