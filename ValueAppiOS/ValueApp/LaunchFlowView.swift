@@ -49,7 +49,7 @@ private struct IntroductionView: View {
                     VStack(spacing: 28) {
                         Spacer()
                         Image(systemName: item.icon).font(.system(size: 76)).foregroundStyle(.white).frame(width: 154, height: 154).background(item.accent.gradient, in: RoundedRectangle(cornerRadius: 42)).shadow(color: item.accent.opacity(0.25), radius: 22, y: 12)
-                        VStack(spacing: 14) { Text(item.title).font(.largeTitle.bold()).multilineTextAlignment(.center); Text(item.detail).font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(4) }.padding(.horizontal, 28)
+                        VStack(spacing: 14) { Text(item.title).font(.largeTitle.bold()).foregroundStyle(Color.primary).multilineTextAlignment(.center); Text(item.detail).font(.title3).foregroundStyle(Color.secondary).multilineTextAlignment(.center).lineSpacing(4) }.padding(.horizontal, 28)
                         Spacer()
                     }.tag(index)
                 }

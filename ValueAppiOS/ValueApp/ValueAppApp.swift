@@ -11,6 +11,7 @@ struct ValueAppApp: App {
                 .environmentObject(store)
                 .environmentObject(proximity)
                 .tint(.valuePurple)
+                .preferredColorScheme(.light)
                 .task { proximity.connect(to: store) }
         }
     }
