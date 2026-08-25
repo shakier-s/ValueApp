@@ -6,7 +6,7 @@ struct ValueAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            LaunchFlowView()
                 .environmentObject(store)
                 .tint(.valuePurple)
         }

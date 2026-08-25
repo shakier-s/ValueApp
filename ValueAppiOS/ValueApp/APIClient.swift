@@ -16,6 +16,7 @@ actor APIClient {
     }
 
     func deals() async throws -> [Deal] { try await request("/v1/deals") }
+    func merchantDeals() async throws -> [Deal] { try await request("/v1/merchant/deals") }
     func vouchers() async throws -> [Voucher] { try await request("/v1/vouchers") }
 
     func saveVoucher(dealID: UUID) async throws -> Voucher {
@@ -28,6 +29,14 @@ actor APIClient {
 
     func setActive(_ active: Bool, dealID: UUID) async throws {
         let _: APIResult = try await request("/v1/deals/\(dealID)/status", method: "PATCH", body: ["isActive": active])
+    }
+
+    func updateDeal(_ deal: Deal) async throws -> Deal {
+        try await request("/v1/deals/\(deal.id)", method: "PUT", body: deal)
+    }
+
+    func deleteDeal(_ dealID: UUID) async throws {
+        let _: APIResult = try await request("/v1/deals/\(dealID)", method: "DELETE")
     }
 
     func redeem(voucherID: UUID, attendantCode: String) async throws {

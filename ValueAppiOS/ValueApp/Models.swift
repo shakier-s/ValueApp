@@ -28,6 +28,7 @@ struct Deal: Identifiable, Codable, Hashable {
     var quantity: Int
     var redeemed: Int = 0
     var isActive = true
+    var isOwned: Bool?
 
     var offerText: String {
         switch type {

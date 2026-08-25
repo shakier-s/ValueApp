@@ -3,16 +3,34 @@ import SwiftUI
 struct MerchantDashboard: View {
     @EnvironmentObject private var store: DealStore
     @Binding var showingRolePicker: Bool
-    var totalRedemptions: Int { store.deals.reduce(0) { $0 + $1.redeemed } }
+    @State private var editingDeal: Deal?
+    @State private var deletingDeal: Deal?
+    var totalRedemptions: Int { store.merchantDeals.reduce(0) { $0 + $1.redeemed } }
     var body: some View {
         ScrollView { LazyVStack(alignment: .leading, spacing: 18) {
             HStack { VStack(alignment: .leading) { Text("Shop dashboard").font(.largeTitle.bold()); Text("Manage offers and track results").foregroundStyle(.secondary) }; Spacer(); Button { showingRolePicker = true } label: { Image(systemName: "person.2.fill").padding(12).background(Color.valueCream).clipShape(Circle()) } }
-            HStack(spacing: 12) { metric("Active deals", value: "\(store.deals.filter(\.isActive).count)", icon: "tag.fill"); metric("Redemptions", value: "\(totalRedemptions)", icon: "checkmark.seal.fill") }
+            HStack(spacing: 12) { metric("Active deals", value: "\(store.merchantDeals.filter(\.isActive).count)", icon: "tag.fill"); metric("Redemptions", value: "\(totalRedemptions)", icon: "checkmark.seal.fill") }
             Text("Your deals").font(.title2.bold())
-            ForEach(store.deals) { deal in VStack(alignment: .leading, spacing: 12) { HStack { VStack(alignment: .leading) { Text(deal.title).font(.headline); Text(deal.offerText).font(.caption.bold()).foregroundStyle(Color.valuePurple) }; Spacer(); Toggle("", isOn: Binding(get: { deal.isActive }, set: { _ in store.toggleActive(deal) })).labelsHidden() }; ProgressView(value: Double(deal.redeemed), total: Double(max(deal.quantity, 1))); HStack { Text("\(deal.redeemed) redeemed"); Spacer(); Text("\(deal.quantity - deal.redeemed) remaining") }.font(.caption).foregroundStyle(.secondary) }.padding(16).background(Color.valueCream).clipShape(RoundedRectangle(cornerRadius: 18)) }
+            if store.merchantDeals.isEmpty { ContentUnavailableView("No deals yet", systemImage: "tag", description: Text("Create your first offer from the Create tab.")) }
+            ForEach(store.merchantDeals) { deal in VStack(alignment: .leading, spacing: 12) { HStack { VStack(alignment: .leading) { Text(deal.title).font(.headline); Text(deal.offerText).font(.caption.bold()).foregroundStyle(Color.valuePurple) }; Spacer(); Toggle("", isOn: Binding(get: { deal.isActive }, set: { _ in store.toggleActive(deal) })).labelsHidden() }; ProgressView(value: Double(deal.redeemed), total: Double(max(deal.quantity, 1))); HStack { Text("\(deal.redeemed) redeemed"); Spacer(); Text("\(deal.quantity - deal.redeemed) remaining") }.font(.caption).foregroundStyle(.secondary); HStack { Button("Edit", systemImage: "pencil") { editingDeal = deal }; Spacer(); Button("Delete", systemImage: "trash", role: .destructive) { deletingDeal = deal } }.buttonStyle(.bordered) }.padding(16).background(Color.valueCream).clipShape(RoundedRectangle(cornerRadius: 18)) }
         }.padding(20) }.toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $editingDeal) { EditDealView(deal: $0) }
+        .alert("Delete this deal?", isPresented: Binding(get: { deletingDeal != nil }, set: { if !$0 { deletingDeal = nil } })) { Button("Cancel", role: .cancel) { deletingDeal = nil }; Button("Delete", role: .destructive) { if let deal = deletingDeal { store.delete(deal) }; deletingDeal = nil } } message: { Text("This removes the deal and prevents new voucher saves.") }
     }
     private func metric(_ title: String, value: String, icon: String) -> some View { VStack(alignment: .leading, spacing: 12) { Image(systemName: icon).foregroundStyle(Color.valueCoral); Text(value).font(.largeTitle.bold()); Text(title).font(.caption).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.valueCream).clipShape(RoundedRectangle(cornerRadius: 18)) }
+}
+
+private struct EditDealView: View {
+    @EnvironmentObject private var store: DealStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var deal: Deal
+    init(deal: Deal) { _deal = State(initialValue: deal) }
+    var body: some View {
+        NavigationStack { Form {
+            Section("Offer") { TextField("Store name", text: $deal.merchant); TextField("Deal title", text: $deal.title); TextField("Describe the terms", text: $deal.detail, axis: .vertical).lineLimit(3...6); Picker("Deal type", selection: $deal.type) { ForEach(DealType.allCases) { Text($0.rawValue).tag($0) } }; if deal.type != .buyOneGetOne { TextField("Discount value", value: $deal.value, format: .number).keyboardType(.decimalPad) } }
+            Section("Availability") { Picker("Category", selection: $deal.category) { ForEach(["Restaurants", "Groceries", "Cafés", "Health", "Retail"], id: \.self) { Text($0) } }; DatePicker("Expires", selection: $deal.expiry, in: Date.now..., displayedComponents: .date); Stepper("\(deal.quantity) vouchers", value: $deal.quantity, in: max(1, deal.redeemed)...10_000) }
+        }.navigationTitle("Edit deal").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { if deal.type == .buyOneGetOne { deal.value = 100 }; store.update(deal); dismiss() }.disabled(deal.title.trimmingCharacters(in: .whitespaces).isEmpty || deal.detail.trimmingCharacters(in: .whitespaces).isEmpty) } } }
+    }
 }
 
 struct CreateDealView: View {

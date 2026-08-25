@@ -37,6 +37,13 @@ app.get("/v1/deals", asyncRoute(async (_req, res) => {
   res.json(rows);
 }));
 
+app.get("/v1/merchant/deals", asyncRoute(async (req, res) => {
+  const owner = userID(req);
+  if (!owner) return res.status(401).json({ error: "x-user-id required" });
+  const { rows } = await pool.query(`${dealSelect} WHERE m.owner_id=$1 ORDER BY d.created_at DESC`, [owner]);
+  res.json(rows.map(row => ({ ...row, isOwned: true })));
+}));
+
 app.post("/v1/merchants", asyncRoute(async (req, res) => {
   const owner = userID(req);
   const { name, attendantCode } = req.body;
@@ -56,13 +63,31 @@ app.post("/v1/deals", asyncRoute(async (req, res) => {
     const result = await client.query(`INSERT INTO deals(merchant_id,title,detail,deal_type,value,category,expiry,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [merchantResult.rows[0].id, title, detail, type, value, category, expiry, quantity]);
     await client.query("COMMIT");
     const { rows } = await pool.query(`${dealSelect} WHERE d.id=$1`, [result.rows[0].id]);
-    res.status(201).json(rows[0]);
+    res.status(201).json({ ...rows[0], isOwned: true });
   } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
 }));
 
 app.patch("/v1/deals/:id/status", asyncRoute(async (req, res) => {
   const owner = userID(req);
   const result = await pool.query(`UPDATE deals d SET is_active=$1 FROM merchants m WHERE d.id=$2 AND d.merchant_id=m.id AND m.owner_id=$3 RETURNING d.id`, [Boolean(req.body.isActive), req.params.id, owner]);
+  if (!result.rowCount) return res.status(404).json({ error: "deal not found" });
+  res.json({ ok: true });
+}));
+
+app.put("/v1/deals/:id", asyncRoute(async (req, res) => {
+  const owner = userID(req);
+  const { merchant, title, detail, type, value, category, expiry, quantity } = req.body;
+  if (!owner || !merchant || !title || !detail || !type || !category || !expiry || !quantity) return res.status(400).json({ error: "missing deal fields" });
+  const result = await pool.query(`UPDATE deals d SET title=$1,detail=$2,deal_type=$3,value=$4,category=$5,expiry=$6,quantity=$7 FROM merchants m WHERE d.id=$8 AND d.merchant_id=m.id AND m.owner_id=$9 RETURNING d.id`, [title, detail, type, value, category, expiry, quantity, req.params.id, owner]);
+  if (!result.rowCount) return res.status(404).json({ error: "deal not found" });
+  await pool.query(`UPDATE merchants SET name=$1 WHERE owner_id=$2`, [merchant, owner]);
+  const { rows } = await pool.query(`${dealSelect} WHERE d.id=$1 AND m.owner_id=$2`, [req.params.id, owner]);
+  res.json({ ...rows[0], isOwned: true });
+}));
+
+app.delete("/v1/deals/:id", asyncRoute(async (req, res) => {
+  const owner = userID(req);
+  const result = await pool.query(`DELETE FROM deals d USING merchants m WHERE d.id=$1 AND d.merchant_id=m.id AND m.owner_id=$2 RETURNING d.id`, [req.params.id, owner]);
   if (!result.rowCount) return res.status(404).json({ error: "deal not found" });
   res.json({ ok: true });
 }));

@@ -20,6 +20,7 @@ final class DealStore: ObservableObject {
     }
 
     var activeDeals: [Deal] { deals.filter { $0.isActive && $0.expiry > .now && $0.redeemed < $0.quantity } }
+    var merchantDeals: [Deal] { deals.filter { $0.isOwned == true } }
 
     func voucher(for deal: Deal) -> Voucher? {
         vouchers.first { $0.dealID == deal.id && $0.status == .saved }
@@ -55,7 +56,9 @@ final class DealStore: ObservableObject {
     }
 
     func create(_ deal: Deal) {
-        deals.insert(deal, at: 0)
+        var ownedDeal = deal
+        ownedDeal.isOwned = true
+        deals.insert(ownedDeal, at: 0)
         Task {
             if let cloudDeal = try? await APIClient.shared.createDeal(deal) {
                 deals.removeAll { $0.id == deal.id }
@@ -64,8 +67,23 @@ final class DealStore: ObservableObject {
             }
         }
     }
+
+    func update(_ deal: Deal) {
+        guard deal.isOwned == true, let index = deals.firstIndex(where: { $0.id == deal.id && $0.isOwned == true }) else { return }
+        deals[index] = deal
+        Task {
+            if let cloudDeal = try? await APIClient.shared.updateDeal(deal),
+               let current = deals.firstIndex(where: { $0.id == deal.id }) { deals[current] = cloudDeal; isCloudConnected = true }
+        }
+    }
+
+    func delete(_ deal: Deal) {
+        guard deal.isOwned == true else { return }
+        deals.removeAll { $0.id == deal.id && $0.isOwned == true }
+        Task { try? await APIClient.shared.deleteDeal(deal.id) }
+    }
     func toggleActive(_ deal: Deal) {
-        guard let index = deals.firstIndex(where: { $0.id == deal.id }) else { return }
+        guard deal.isOwned == true, let index = deals.firstIndex(where: { $0.id == deal.id && $0.isOwned == true }) else { return }
         deals[index].isActive.toggle()
         let active = deals[index].isActive
         Task { try? await APIClient.shared.setActive(active, dealID: deal.id) }
@@ -74,9 +92,10 @@ final class DealStore: ObservableObject {
     func refresh() async {
         do {
             async let cloudDeals = APIClient.shared.deals()
+            async let ownedDeals = APIClient.shared.merchantDeals()
             async let cloudVouchers = APIClient.shared.vouchers()
-            let (newDeals, newVouchers) = try await (cloudDeals, cloudVouchers)
-            if !newDeals.isEmpty { deals = newDeals }
+            let (newDeals, newOwnedDeals, newVouchers) = try await (cloudDeals, ownedDeals, cloudVouchers)
+            deals = newOwnedDeals + newDeals.filter { publicDeal in !newOwnedDeals.contains(where: { $0.id == publicDeal.id }) }
             vouchers = newVouchers
             isCloudConnected = true
         } catch { isCloudConnected = false }
