@@ -1,0 +1,74 @@
+import SwiftUI
+
+struct RootView: View {
+    @AppStorage("valueapp.role") private var role = "shopper"
+    @State private var showingRolePicker = false
+
+    var body: some View {
+        Group {
+            if role == "merchant" { MerchantTabs(showingRolePicker: $showingRolePicker) }
+            else { ShopperTabs(showingRolePicker: $showingRolePicker) }
+        }
+        .sheet(isPresented: $showingRolePicker) {
+            RolePicker(role: $role)
+                .presentationDetents([.height(310)])
+        }
+    }
+}
+
+private struct RolePicker: View {
+    @Binding var role: String
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(spacing: 18) {
+            Capsule().fill(.secondary.opacity(0.3)).frame(width: 42, height: 5)
+            Image(systemName: "person.2.badge.gearshape.fill").font(.system(size: 38)).foregroundStyle(Color.valuePurple)
+            Text("How are you using ValueApp?").font(.title2.bold())
+            Text("Switch any time. Your deals and vouchers stay right here.").multilineTextAlignment(.center).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                roleButton("Shop deals", icon: "bag.fill", value: "shopper")
+                roleButton("Manage deals", icon: "storefront.fill", value: "merchant")
+            }
+        }.padding(24)
+    }
+    private func roleButton(_ title: String, icon: String, value: String) -> some View {
+        Button { role = value; dismiss() } label: {
+            VStack(spacing: 10) { Image(systemName: icon).font(.title2); Text(title).font(.subheadline.bold()) }
+                .frame(maxWidth: .infinity).padding(.vertical, 16)
+                .background(role == value ? Color.valuePurple : Color.valueCream)
+                .foregroundStyle(role == value ? .white : Color.valuePurple).clipShape(RoundedRectangle(cornerRadius: 18))
+        }
+    }
+}
+
+private struct ShopperTabs: View {
+    @Binding var showingRolePicker: Bool
+    var body: some View {
+        TabView {
+            NavigationStack { DiscoverView(showingRolePicker: $showingRolePicker) }.tabItem { Label("Discover", systemImage: "sparkles") }
+            NavigationStack { VouchersView() }.tabItem { Label("My Vouchers", systemImage: "ticket.fill") }
+            NavigationStack { ShopperProfile(showingRolePicker: $showingRolePicker) }.tabItem { Label("Profile", systemImage: "person.fill") }
+        }
+    }
+}
+
+private struct MerchantTabs: View {
+    @Binding var showingRolePicker: Bool
+    var body: some View {
+        TabView {
+            NavigationStack { MerchantDashboard(showingRolePicker: $showingRolePicker) }.tabItem { Label("Dashboard", systemImage: "chart.bar.fill") }
+            NavigationStack { CreateDealView() }.tabItem { Label("Create", systemImage: "plus.circle.fill") }
+            NavigationStack { RedemptionHistory() }.tabItem { Label("Redemptions", systemImage: "checkmark.seal.fill") }
+        }
+    }
+}
+
+private struct ShopperProfile: View {
+    @Binding var showingRolePicker: Bool
+    var body: some View {
+        List {
+            Section { Label("ValueApp Shopper", systemImage: "person.crop.circle.fill"); Label("Notifications", systemImage: "bell.fill"); Label("Help & Support", systemImage: "questionmark.circle.fill") }
+            Section { Button("Switch to shop owner") { showingRolePicker = true } }
+        }.navigationTitle("Profile")
+    }
+}
