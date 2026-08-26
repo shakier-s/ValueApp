@@ -26,10 +26,18 @@ async function identity(req, requiredRole) {
   return req.header("x-user-id")?.trim() || null;
 }
 
+async function authenticatedUser(req, requiredRole) {
+  const bearer = req.header("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!bearer) return null;
+  const { rows } = await pool.query(`SELECT u.id,u.email,u.name,u.role,u.password_salt,u.password_hash,s.token_hash FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()`, [hash(bearer)]);
+  if (!rows.length || (requiredRole && rows[0].role !== requiredRole)) return null;
+  return rows[0];
+}
+
 async function createSession(user) {
   const token = crypto.randomBytes(32).toString("hex");
   await pool.query(`INSERT INTO auth_sessions(token_hash,user_id) VALUES($1,$2)`, [hash(token), user.id]);
-  return { token, user: { id: user.id, email: user.email, role: user.role } };
+  return { token, user: { id: user.id, email: user.email, name: user.name || null, role: user.role } };
 }
 
 async function migrate() {
@@ -53,10 +61,11 @@ app.post("/v1/auth/register", asyncRoute(async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
   const role = req.body.role;
+  const name = String(req.body.name || "").trim().slice(0, 80) || null;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || !["shopper", "merchant"].includes(role)) return res.status(400).json({ error: "Enter a valid email, an 8-character password and an account type." });
   const salt = crypto.randomBytes(16).toString("hex");
   try {
-    const { rows } = await pool.query(`INSERT INTO users(email,password_salt,password_hash,role) VALUES($1,$2,$3,$4) RETURNING id,email,role`, [email, salt, passwordHash(password, salt), role]);
+    const { rows } = await pool.query(`INSERT INTO users(email,name,password_salt,password_hash,role) VALUES($1,$2,$3,$4,$5) RETURNING id,email,name,role`, [email, name, salt, passwordHash(password, salt), role]);
     res.status(201).json(await createSession(rows[0]));
   } catch (error) {
     if (error.code === "23505") return res.status(409).json({ error: "An account with this email already exists." });
@@ -67,12 +76,41 @@ app.post("/v1/auth/register", asyncRoute(async (req, res) => {
 app.post("/v1/auth/login", asyncRoute(async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
-  const { rows } = await pool.query(`SELECT id,email,role,password_salt,password_hash FROM users WHERE email=$1`, [email]);
+  const { rows } = await pool.query(`SELECT id,email,name,role,password_salt,password_hash FROM users WHERE email=$1`, [email]);
   if (!rows.length) return res.status(401).json({ error: "Incorrect email or password." });
   const candidate = Buffer.from(passwordHash(password, rows[0].password_salt), "hex");
   const expected = Buffer.from(rows[0].password_hash, "hex");
   if (candidate.length !== expected.length || !crypto.timingSafeEqual(candidate, expected)) return res.status(401).json({ error: "Incorrect email or password." });
   res.json(await createSession(rows[0]));
+}));
+
+app.patch("/v1/profile", asyncRoute(async (req, res) => {
+  const user = await authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: "Sign in required." });
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const name = String(req.body.name || "").trim().slice(0, 80);
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a name and valid email address." });
+  try {
+    const { rows } = await pool.query(`UPDATE users SET name=$1,email=$2 WHERE id=$3 RETURNING id,email,name,role`, [name, email, user.id]);
+    res.json(rows[0]);
+  } catch (error) {
+    if (error.code === "23505") return res.status(409).json({ error: "An account with this email already exists." });
+    throw error;
+  }
+}));
+
+app.patch("/v1/profile/password", asyncRoute(async (req, res) => {
+  const user = await authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: "Sign in required." });
+  const currentPassword = String(req.body.currentPassword || "");
+  const newPassword = String(req.body.newPassword || "");
+  const candidate = Buffer.from(passwordHash(currentPassword, user.password_salt), "hex");
+  const expected = Buffer.from(user.password_hash, "hex");
+  if (candidate.length !== expected.length || !crypto.timingSafeEqual(candidate, expected)) return res.status(403).json({ error: "Current password is incorrect." });
+  if (newPassword.length < 8) return res.status(400).json({ error: "New password must contain at least 8 characters." });
+  const salt = crypto.randomBytes(16).toString("hex");
+  await pool.query(`UPDATE users SET password_salt=$1,password_hash=$2 WHERE id=$3`, [salt, passwordHash(newPassword, salt), user.id]);
+  res.json({ ok: true });
 }));
 
 app.get("/v1/deals", asyncRoute(async (_req, res) => {
@@ -145,10 +183,18 @@ app.get("/v1/vouchers", asyncRoute(async (req, res) => {
 app.post("/v1/deals/:id/vouchers", asyncRoute(async (req, res) => {
   const shopper = await identity(req, "shopper");
   if (!shopper) return res.status(401).json({ error: "x-user-id required" });
-  const code = `VAL-${crypto.randomInt(100000, 999999)}`;
-  const { rows } = await pool.query(`INSERT INTO vouchers(deal_id,shopper_id,code) SELECT id,$2,$3 FROM deals WHERE id=$1 AND is_active AND expiry>now() AND redeemed<quantity ON CONFLICT(deal_id,shopper_id) DO UPDATE SET deal_id=EXCLUDED.deal_id RETURNING id,deal_id AS "dealID",code,saved_at AS "savedAt",redeemed_at AS "redeemedAt",status`, [req.params.id, shopper, code]);
-  if (!rows.length) return res.status(404).json({ error: "deal unavailable" });
-  res.status(201).json(rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const deal = await client.query(`SELECT id FROM deals WHERE id=$1 AND is_active AND expiry>now() AND redeemed<quantity FOR UPDATE`, [req.params.id]);
+    if (!deal.rows.length) { await client.query("ROLLBACK"); return res.status(404).json({ error: "deal unavailable" }); }
+    const owned = await client.query(`SELECT count(*)::int AS count FROM vouchers WHERE deal_id=$1 AND shopper_id=$2`, [req.params.id, shopper]);
+    if (owned.rows[0].count >= 10) { await client.query("ROLLBACK"); return res.status(409).json({ error: "You can save up to 10 coupons from the same deal." }); }
+    const code = `VAL-${crypto.randomInt(100000, 999999)}`;
+    const { rows } = await client.query(`INSERT INTO vouchers(deal_id,shopper_id,code) VALUES($1,$2,$3) RETURNING id,deal_id AS "dealID",code,saved_at AS "savedAt",redeemed_at AS "redeemedAt",status`, [req.params.id, shopper, code]);
+    await client.query("COMMIT");
+    res.status(201).json(rows[0]);
+  } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
 }));
 
 app.post("/v1/vouchers/:id/redeem", asyncRoute(async (req, res) => {
@@ -156,8 +202,9 @@ app.post("/v1/vouchers/:id/redeem", asyncRoute(async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const found = await client.query(`SELECT v.deal_id,m.attendant_code_hash FROM vouchers v JOIN deals d ON d.id=v.deal_id JOIN merchants m ON m.id=d.merchant_id WHERE v.id=$1 AND v.shopper_id=$2 AND v.status='Ready to use' FOR UPDATE`, [req.params.id, shopper]);
+    const found = await client.query(`SELECT v.deal_id,m.attendant_code_hash,d.redeemed,d.quantity FROM vouchers v JOIN deals d ON d.id=v.deal_id JOIN merchants m ON m.id=d.merchant_id WHERE v.id=$1 AND v.shopper_id=$2 AND v.status='Ready to use' FOR UPDATE`, [req.params.id, shopper]);
     if (!found.rows.length || found.rows[0].attendant_code_hash !== hash(req.body.attendantCode || "")) { await client.query("ROLLBACK"); return res.status(403).json({ error: "invalid or used voucher" }); }
+    if (found.rows[0].redeemed >= found.rows[0].quantity) { await client.query("ROLLBACK"); return res.status(409).json({ error: "This deal has no coupons remaining." }); }
     await client.query(`UPDATE vouchers SET status='Redeemed',redeemed_at=now() WHERE id=$1`, [req.params.id]);
     await client.query(`UPDATE deals SET redeemed=redeemed+1 WHERE id=$1 AND redeemed<quantity`, [found.rows[0].deal_id]);
     await client.query("COMMIT");

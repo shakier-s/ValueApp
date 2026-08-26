@@ -23,8 +23,18 @@ final class DealStore: ObservableObject {
     var activeDeals: [Deal] { deals.filter { $0.isActive && $0.expiry > .now && $0.redeemed < $0.quantity } }
     var merchantDeals: [Deal] { deals.filter { $0.isOwned == true } }
 
+    func coupons(for deal: Deal) -> [Voucher] {
+        vouchers
+            .filter { $0.dealID == deal.id }
+            .sorted { $0.savedAt > $1.savedAt }
+    }
+
     func voucher(for deal: Deal) -> Voucher? {
-        vouchers.first { $0.dealID == deal.id && $0.status == .saved }
+        coupons(for: deal).first
+    }
+
+    func canSaveCoupon(for deal: Deal) -> Bool {
+        coupons(for: deal).count < 10 && deal.isActive && deal.expiry > .now && deal.redeemed < deal.quantity
     }
 
     func updateDistances(from location: CLLocation) {
@@ -36,15 +46,21 @@ final class DealStore: ObservableObject {
 
     @discardableResult
     func save(deal: Deal) -> Voucher {
-        if let current = voucher(for: deal) { return current }
+        let existing = coupons(for: deal)
+        if existing.count >= 10 { return existing[0] }
         let code = String(format: "VAL-%04d", Int.random(in: 1000...9999))
         let voucher = Voucher(dealID: deal.id, code: code, savedAt: .now)
         vouchers.insert(voucher, at: 0)
         Task {
-            if let cloudVoucher = try? await APIClient.shared.saveVoucher(dealID: deal.id),
-               let index = vouchers.firstIndex(where: { $0.dealID == deal.id && $0.status == .saved }) {
-                vouchers[index] = cloudVoucher
+            do {
+                let cloudVoucher = try await APIClient.shared.saveVoucher(dealID: deal.id)
+                if let index = vouchers.firstIndex(where: { $0.id == voucher.id }) {
+                    vouchers[index] = cloudVoucher
+                }
                 isCloudConnected = true
+            } catch {
+                vouchers.removeAll { $0.id == voucher.id }
+                await refresh()
             }
         }
         return voucher

@@ -7,8 +7,8 @@ struct LaunchFlowView: View {
     var body: some View {
         ZStack {
             if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "discover" { RootView() }
-            else if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "savings" { MarketingIntroView(icon: "tag.fill", title: "Save more on every visit", detail: "Enjoy buy-one-get-one-free vouchers, percentage discounts and instant money-off deals.", accent: .valueCoral) }
-            else if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "redeem" { MarketingIntroView(icon: "ticket.fill", title: "Redeem in seconds", detail: "Save a voucher, show it at the shop and redeem securely. No paper coupons and no complicated steps.", accent: .green) }
+            else if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "savings" { MarketingIntroView(icon: "tag.fill", title: "Save more on every visit", detail: "Enjoy buy-one-get-one-free coupons, percentage discounts and instant money-off deals.", accent: .valueCoral) }
+            else if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "redeem" { MarketingIntroView(icon: "ticket.fill", title: "Redeem in seconds", detail: "Save a coupon, show it at the shop and redeem securely. No paper coupons and no complicated steps.", accent: .green) }
             else if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "intro-1" { IntroductionView(initialPage: 0) {} }
             else if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "intro-2" { IntroductionView(initialPage: 1) {} }
             else if ProcessInfo.processInfo.environment["VALUEAPP_SCREENSHOT_MODE"] == "intro-3" { IntroductionView(initialPage: 2) {} }
@@ -61,8 +61,8 @@ private struct IntroductionView: View {
     init(initialPage: Int = 0, finish: @escaping () -> Void) { self.finish = finish; _page = State(initialValue: initialPage) }
     private let pages = [
         IntroPage(icon: "sparkles", title: "Discover value nearby", detail: "Find exclusive offers from restaurants, cafés, retailers and local favourites—all in one place.", accent: Color.valuePurple),
-        IntroPage(icon: "tag.fill", title: "Save more on every visit", detail: "Enjoy buy-one-get-one-free vouchers, percentage discounts and instant money-off deals.", accent: Color.valueCoral),
-        IntroPage(icon: "ticket.fill", title: "Redeem in seconds", detail: "Save a voucher, show it at the shop and redeem securely. No paper coupons and no complicated steps.", accent: .green)
+        IntroPage(icon: "tag.fill", title: "Save more on every visit", detail: "Enjoy buy-one-get-one-free coupons, percentage discounts and instant money-off deals.", accent: Color.valueCoral),
+        IntroPage(icon: "ticket.fill", title: "Redeem in seconds", detail: "Save a coupon, show it at the shop and redeem securely. No paper coupons and no complicated steps.", accent: .green)
     ]
 
     var body: some View {

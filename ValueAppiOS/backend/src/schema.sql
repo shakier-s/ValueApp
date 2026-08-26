@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
+
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash TEXT PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -52,6 +54,11 @@ CREATE TABLE IF NOT EXISTS vouchers (
   redeemed_at TIMESTAMPTZ,
   UNIQUE(deal_id, shopper_id)
 );
+
+-- Coupons were originally limited to one per shopper and deal. The app now
+-- enforces a maximum of ten while each coupon keeps its own redemption state.
+ALTER TABLE vouchers DROP CONSTRAINT IF EXISTS vouchers_deal_id_shopper_id_key;
+CREATE INDEX IF NOT EXISTS vouchers_deal_shopper_idx ON vouchers(deal_id, shopper_id, saved_at DESC);
 
 CREATE INDEX IF NOT EXISTS deals_active_expiry_idx ON deals(is_active, expiry);
 CREATE INDEX IF NOT EXISTS vouchers_shopper_idx ON vouchers(shopper_id, saved_at DESC);

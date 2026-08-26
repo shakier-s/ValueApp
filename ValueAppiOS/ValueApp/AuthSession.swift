@@ -12,6 +12,7 @@ enum AccountRole: String, Codable, CaseIterable, Identifiable {
 struct AuthUser: Codable {
     let id: UUID
     let email: String
+    let name: String?
     let role: AccountRole
 }
 
@@ -44,6 +45,38 @@ final class AuthSession: ObservableObject {
         await authenticate { try await APIClient.shared.register(email: email, password: password, role: role) }
     }
 
+    func updateProfile(name: String, email: String) async -> Bool {
+        isWorking = true
+        errorMessage = nil
+        defer { isWorking = false }
+        do {
+            let updatedUser = try await APIClient.shared.updateProfile(name: name, email: email)
+            user = updatedUser
+            persist(updatedUser)
+            return true
+        } catch let error as APIError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = "Unable to update your profile. Please try again."
+        }
+        return false
+    }
+
+    func changePassword(currentPassword: String, newPassword: String) async -> Bool {
+        isWorking = true
+        errorMessage = nil
+        defer { isWorking = false }
+        do {
+            try await APIClient.shared.changePassword(currentPassword: currentPassword, newPassword: newPassword)
+            return true
+        } catch let error as APIError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = "Unable to change your password. Please try again."
+        }
+        return false
+    }
+
     func signOut() {
         user = nil
         errorMessage = nil
@@ -59,7 +92,7 @@ final class AuthSession: ObservableObject {
         do {
             let response = try await operation()
             user = response.user
-            UserDefaults.standard.set(try JSONEncoder().encode(response.user), forKey: userKey)
+            persist(response.user)
             Keychain.save(response.token, key: tokenKey)
             await APIClient.shared.setAuthToken(response.token)
             return true
@@ -69,6 +102,12 @@ final class AuthSession: ObservableObject {
             errorMessage = "Unable to connect. Please try again."
         }
         return false
+    }
+
+    private func persist(_ user: AuthUser) {
+        if let data = try? JSONEncoder().encode(user) {
+            UserDefaults.standard.set(data, forKey: userKey)
+        }
     }
 }
 

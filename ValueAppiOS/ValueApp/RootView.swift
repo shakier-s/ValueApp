@@ -66,7 +66,7 @@ struct AccountAccessView: View {
                 }
                 Section {
                     Button("Continue browsing as guest") { dismiss() }.frame(maxWidth: .infinity, alignment: .center)
-                } footer: { Text("Guests can browse offers. Shoppers can save vouchers, while shop owners can manage only their own deals.") }
+                } footer: { Text("Guests can browse offers. Shoppers can save coupons, while shop owners can manage only their own deals.") }
             }
             .navigationTitle(creatingAccount ? "Create account" : "Welcome back")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
@@ -91,7 +91,7 @@ private struct GuestProfile: View {
     @Binding var showingAccountAccess: Bool
     var body: some View {
         List {
-            Section { Label("Browsing as guest", systemImage: "eye.fill"); Text("Explore nearby offers without saving vouchers or creating redemption activity.").font(.footnote).foregroundStyle(.secondary) }
+            Section { Label("Browsing as guest", systemImage: "eye.fill"); Text("Explore nearby offers without saving coupons or creating redemption activity.").font(.footnote).foregroundStyle(.secondary) }
             Section { Button("Sign in or create an account") { showingAccountAccess = true } }
         }.navigationTitle("Guest mode")
     }
@@ -102,45 +102,135 @@ private struct ShopperTabs: View {
     var body: some View {
         TabView {
             NavigationStack { DiscoverView(showingRolePicker: $showingRolePicker) }.tabItem { Label("Discover", systemImage: "sparkles") }
-            NavigationStack { VouchersView() }.tabItem { Label("My Vouchers", systemImage: "ticket.fill") }
-            NavigationStack { RedeemedVouchersView() }.tabItem { Label("Redeemed", systemImage: "checkmark.seal.fill") }
-            NavigationStack { ShopperProfile() }.tabItem { Label("Profile", systemImage: "person.fill") }
+            NavigationStack { CouponsView() }.tabItem { Label("My Coupons", systemImage: "ticket.fill") }
+            NavigationStack { RedeemedCouponsView() }.tabItem { Label("Redeemed", systemImage: "checkmark.seal.fill") }
+            NavigationStack { AccountProfileView(showLocationSettings: true) }.tabItem { Label("Profile", systemImage: "person.fill") }
         }
     }
 }
 
 private struct MerchantTabs: View {
     @Binding var showingRolePicker: Bool
+    @State private var selectedTab = MerchantTab.dashboard
+
+    private enum MerchantTab: Hashable {
+        case dashboard, create, redemptions, profile
+    }
+
     var body: some View {
-        TabView {
-            NavigationStack { MerchantDashboard(showingRolePicker: $showingRolePicker) }.tabItem { Label("Dashboard", systemImage: "chart.bar.fill") }
-            NavigationStack { CreateDealView() }.tabItem { Label("Create", systemImage: "plus.circle.fill") }
-            NavigationStack { RedemptionHistory() }.tabItem { Label("Redemptions", systemImage: "checkmark.seal.fill") }
+        TabView(selection: $selectedTab) {
+            NavigationStack { MerchantDashboard(showingRolePicker: $showingRolePicker) }
+                .tabItem { Label("Dashboard", systemImage: "chart.bar.fill") }
+                .tag(MerchantTab.dashboard)
+            NavigationStack { CreateDealView(showMyDeals: { selectedTab = .dashboard }) }
+                .tabItem { Label("Create", systemImage: "plus.circle.fill") }
+                .tag(MerchantTab.create)
+            NavigationStack { RedemptionHistory() }
+                .tabItem { Label("Redemptions", systemImage: "checkmark.seal.fill") }
+                .tag(MerchantTab.redemptions)
+            NavigationStack { AccountProfileView(showLocationSettings: false) }
+                .tabItem { Label("Profile", systemImage: "person.fill") }
+                .tag(MerchantTab.profile)
         }
     }
 }
 
-private struct ShopperProfile: View {
+private struct AccountProfileView: View {
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var proximity: ProximityService
+    @State private var showingProfileEditor = false
+    @State private var showingPasswordEditor = false
+    let showLocationSettings: Bool
+
     var body: some View {
         List {
-            Section { Label(auth.user?.email ?? "ValueApp Shopper", systemImage: "person.crop.circle.fill") }
-            Section("Location & nearby deals") {
-                Button { proximity.enableLocation() } label: { Label(locationLabel, systemImage: "location.fill") }
-                Toggle("Notify me about nearby deals", isOn: Binding(get: { proximity.alertsEnabled }, set: { enabled in Task { await proximity.setNearbyAlerts(enabled) } }))
-                if proximity.alertsEnabled { VStack(alignment: .leading) { Text("Alert distance: \(Int(proximity.radiusKilometres)) km"); Slider(value: $proximity.radiusKilometres, in: 1...20, step: 1) } }
-                Text("Location and notifications are optional and can be changed in iPhone Settings.").font(.footnote).foregroundStyle(.secondary)
+            Section("Account") {
+                LabeledContent("Name", value: auth.user?.name ?? "Not added")
+                LabeledContent("Email", value: auth.user?.email ?? "")
+                LabeledContent("Account type", value: auth.user?.role.title ?? "")
+                Button("Edit profile", systemImage: "person.crop.circle.badge.pencil") { showingProfileEditor = true }
+                Button("Change password", systemImage: "key.fill") { showingPasswordEditor = true }
+            }
+            if showLocationSettings {
+                Section("Location & nearby deals") {
+                    Button { proximity.enableLocation() } label: { Label(locationLabel, systemImage: "location.fill") }
+                    Toggle("Notify me about nearby deals", isOn: Binding(get: { proximity.alertsEnabled }, set: { enabled in Task { await proximity.setNearbyAlerts(enabled) } }))
+                    if proximity.alertsEnabled { VStack(alignment: .leading) { Text("Alert distance: \(Int(proximity.radiusKilometres)) km"); Slider(value: $proximity.radiusKilometres, in: 1...20, step: 1) } }
+                    Text("Location and notifications are optional and can be changed in iPhone Settings.").font(.footnote).foregroundStyle(.secondary)
+                }
             }
             Section { Label("Help & Support", systemImage: "questionmark.circle.fill") }
             Section { Button("Sign out", role: .destructive) { auth.signOut() } }
         }.navigationTitle("Profile")
+        .sheet(isPresented: $showingProfileEditor) { EditProfileView() }
+        .sheet(isPresented: $showingPasswordEditor) { ChangePasswordView() }
     }
     private var locationLabel: String {
         switch proximity.authorization {
         case .authorizedAlways, .authorizedWhenInUse: "Location enabled"
         case .denied, .restricted: "Location access unavailable"
         default: "Enable location"
+        }
+    }
+}
+
+private struct EditProfileView: View {
+    @EnvironmentObject private var auth: AuthSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var email = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Profile details") {
+                    TextField("Full name", text: $name).textContentType(.name)
+                    TextField("Email address", text: $email).textContentType(.emailAddress).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
+                if let error = auth.errorMessage { Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red) } }
+            }
+            .navigationTitle("Edit profile")
+            .onAppear { name = auth.user?.name ?? ""; email = auth.user?.email ?? ""; auth.errorMessage = nil }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { Task { if await auth.updateProfile(name: name, email: email) { dismiss() } } }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !email.contains("@") || auth.isWorking)
+                }
+            }
+        }
+    }
+}
+
+private struct ChangePasswordView: View {
+    @EnvironmentObject private var auth: AuthSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var currentPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmation = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    SecureField("Current password", text: $currentPassword).textContentType(.password)
+                    SecureField("New password", text: $newPassword).textContentType(.newPassword)
+                    SecureField("Confirm new password", text: $confirmation).textContentType(.newPassword)
+                } header: {
+                    Text("Password")
+                } footer: { Text("Use at least 8 characters. Each password is securely hashed before storage.") }
+                if !confirmation.isEmpty && newPassword != confirmation { Section { Label("The new passwords do not match.", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red) } }
+                if let error = auth.errorMessage { Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red) } }
+            }
+            .navigationTitle("Change password")
+            .onAppear { auth.errorMessage = nil }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Update") { Task { if await auth.changePassword(currentPassword: currentPassword, newPassword: newPassword) { dismiss() } } }
+                        .disabled(currentPassword.isEmpty || newPassword.count < 8 || newPassword != confirmation || auth.isWorking)
+                }
+            }
         }
     }
 }

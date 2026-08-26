@@ -24,6 +24,12 @@ actor APIClient {
     func register(email: String, password: String, role: AccountRole) async throws -> AuthResponse {
         try await request("/v1/auth/register", method: "POST", body: ["email": email, "password": password, "role": role.rawValue])
     }
+    func updateProfile(name: String, email: String) async throws -> AuthUser {
+        try await request("/v1/profile", method: "PATCH", body: ["name": name, "email": email])
+    }
+    func changePassword(currentPassword: String, newPassword: String) async throws {
+        let _: APIResult = try await request("/v1/profile/password", method: "PATCH", body: ["currentPassword": currentPassword, "newPassword": newPassword])
+    }
     func merchantDeals() async throws -> [Deal] { try await request("/v1/merchant/deals") }
     func vouchers() async throws -> [Voucher] { try await request("/v1/vouchers") }
 
