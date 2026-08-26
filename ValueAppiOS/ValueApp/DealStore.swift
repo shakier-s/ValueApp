@@ -147,10 +147,11 @@ final class DealStore: ObservableObject {
 
     func refresh() async {
         do {
-            async let cloudDeals = APIClient.shared.deals()
-            async let ownedDeals = APIClient.shared.merchantDeals()
-            async let cloudVouchers = APIClient.shared.vouchers()
-            let (newDeals, newOwnedDeals, newVouchers) = try await (cloudDeals, ownedDeals, cloudVouchers)
+            let newDeals = try await APIClient.shared.deals()
+            async let ownedRequest = APIClient.shared.merchantDeals()
+            async let voucherRequest = APIClient.shared.vouchers()
+            let newOwnedDeals = (try? await ownedRequest) ?? []
+            let newVouchers = (try? await voucherRequest) ?? []
             deals = newOwnedDeals + newDeals.filter { publicDeal in !newOwnedDeals.contains(where: { $0.id == publicDeal.id }) }
             vouchers = newVouchers
             isCloudConnected = true
