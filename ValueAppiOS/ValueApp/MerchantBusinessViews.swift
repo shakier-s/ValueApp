@@ -53,7 +53,7 @@ struct MerchantBusinessView: View {
                 Button("Save merchant options") { Task { _ = await store.updateSubscription(draft) } }
                     .frame(maxWidth: .infinity)
             } footer: {
-                Text("Paid upgrades and add-ons are recorded as requests until billing is confirmed. A ValueApp representative will contact you before charges begin.")
+                Text("Paid upgrades and add-ons are recorded as requests until billing is confirmed. Analytics previews are available before activation.")
             }
         }
         .navigationTitle("Business")
@@ -98,7 +98,7 @@ struct MerchantBusinessView: View {
         }
     }
 
-    private var entitledTier: MerchantTier { draft.status == "active" ? draft.tier : .basic }
+    private var entitledTier: MerchantTier { draft.tier }
 }
 
 private struct MerchantPlansView: View {
