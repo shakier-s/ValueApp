@@ -36,7 +36,7 @@ struct DiscoverView: View {
                 ForEach(filtered) { deal in NavigationLink(value: deal) { DealCard(deal: deal) }.buttonStyle(.plain) }
             }.padding(20)
         }
-        .background(Color.valueCream.ignoresSafeArea())
+        .background(Color.valueLandingBackground.ignoresSafeArea())
         .navigationDestination(for: Deal.self) { DealDetailView(deal: $0) }
         .refreshable { await store.refresh(); proximity.evaluateNearbyDeals() }
         .toolbar(.hidden, for: .navigationBar)
