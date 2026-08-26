@@ -74,6 +74,12 @@ struct DealCard: View {
                 Spacer()
             }
             HStack { Text(deal.offerText).font(.caption.bold()).foregroundStyle(Color.valuePurple).padding(.horizontal, 10).padding(.vertical, 7).background(Color.valuePurple.opacity(0.1)).clipShape(Capsule()); Spacer(); Label(String(format: "%.1f km", deal.distance), systemImage: "location").font(.caption).foregroundStyle(.secondary) }
+            HStack(spacing: 8) {
+                Image(systemName: "ticket.fill").foregroundStyle(Color.valueCoral)
+                Text("\(max(deal.quantity - deal.redeemed, 0)) of \(deal.quantity) coupons remaining")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
         }.padding(16).background(.white).clipShape(RoundedRectangle(cornerRadius: 22)).shadow(color: .black.opacity(0.05), radius: 12, y: 5)
     }
 }
