@@ -6,10 +6,10 @@ This document is the recovery reference for ValueApp. It intentionally contains 
 
 ## Project summary
 
-ValueApp is an iOS voucher marketplace for shoppers and local shop owners.
+ValueApp is an iOS coupon marketplace for shoppers and local shop owners.
 
 - Guests can browse active deals without an account.
-- Shoppers can create an account, save vouchers, redeem them in store, and review their redeemed-voucher history.
+- Shoppers can create an account, save up to 10 coupons from the same deal, redeem each coupon individually in store, and review their redeemed-coupon history.
 - Shop owners can create, edit, activate, deactivate, and delete only deals owned by their account.
 - Merchant subscriptions include Basic (3 active deals), Pro (unlimited deals and basic analytics), and Enterprise (advanced analytics, dedicated support, and multiple locations).
 - Optional merchant growth services include Premium Placement with featured listings, Advertising, and Done-for-you campaign management.
@@ -25,7 +25,7 @@ ValueApp is an iOS voucher marketplace for shoppers and local shop owners.
 - Local project folder: `ValueAppiOS`
 - Xcode project: `ValueAppiOS/ValueApp.xcodeproj`
 - Xcode scheme: `ValueApp`
-- Latest feature commit at the time of writing: `832ab7c` (`Add shopper redeemed voucher history`)
+- Latest feature commit at the time of writing: `85a404c` (`Show analytics previews for merchant plans`)
 
 To recover onto another Mac:
 
@@ -94,6 +94,15 @@ The server runs `backend/src/schema.sql` automatically when it starts. Main tabl
 - `deals`: offers and inventory
 - `vouchers`: shopper-specific voucher codes and redemption status
 
+The database retains the internal table name `vouchers` for API compatibility, while the customer-facing app consistently uses the word **coupon**.
+
+Merchant records also store:
+
+- `subscription_tier`: Basic, Pro, or Enterprise
+- `subscription_status`: active for Basic; paid upgrades remain pending until billing approval
+- Premium Placement, Advertising, and Done-for-you service selections
+- Enterprise multiple-location data as JSON
+
 The `users` table was empty at the time this file was created. Older values such as `test-shopper-amina`, `test-shopper-lee`, and `test-shopper-thabo` are legacy test identifiers in voucher rows, not email/password accounts. Passwords are hashed with `scrypt` and cannot be recovered or viewed.
 
 ## Authentication and account isolation
@@ -106,6 +115,21 @@ Relevant files:
 - `backend/src/schema.sql`
 
 The app supports account creation and login using email, password, and one fixed role (`shopper` or `merchant`). The API returns a bearer token. The iOS app stores that token in the Keychain, never in source control. Shop-owner API mutations verify ownership in SQL. Shopper voucher queries use the authenticated shopper ID. Signing out removes private voucher and owned-deal state from the on-device store.
+
+Public deal loading is independent from role-specific requests. A shopper failing a merchant-only request, or a merchant failing a shopper-only request, must not prevent the public deal feed from loading.
+
+## Merchant subscriptions and analytics
+
+- **Basic:** up to 3 active deals, enforced in the app and API; shows active-deal and redemption totals.
+- **Pro:** unlimited deals after paid activation; previews coupons saved and conversion analytics.
+- **Enterprise:** includes Pro features after activation; previews per-deal performance, dedicated support, and multiple-location management.
+- **Premium Placement:** optional featured placement; featured deals sort first in the public feed and display a Featured badge.
+- **Advertising:** records a merchant request for promoted campaigns.
+- **Done-for-you:** records a request for ValueApp-assisted deal content and campaign management.
+
+Pro and Enterprise analytics previews are visible when the merchant selects the relevant plan. The subscription remains `pending`, and paid entitlements such as unlimited deals are not activated until billing is connected and approved. No merchant should be charged by the current implementation.
+
+Merchants access these tools from the **Business** tab. The Business screen includes a Dashboard button that switches directly back to the merchant dashboard.
 
 Legacy `X-User-ID` support still exists in the API for old test data. Remove that fallback before a strict production security launch, after migrating any data that must be retained. Consider Sign in with Apple as a future authentication option.
 
@@ -215,10 +239,11 @@ xcodebuild -exportArchive \
 ### Shopper
 
 - Create a shopper account with a unique email and an 8+ character password.
-- Save a voucher and confirm it appears under My Vouchers.
-- Redeem it using the correct shop attendant code.
-- Confirm it appears under Redeemed with merchant, code, date, and time.
-- Sign out and confirm private voucher history disappears from the device UI.
+- Confirm active Railway deals load even though merchant-only API requests are unavailable to shopper accounts.
+- Save up to 10 copies of one coupon and confirm each has a unique redemption code.
+- Redeem one coupon using the correct shop attendant code and confirm the remaining copies stay ready to use.
+- Confirm the redeemed coupon appears under Redeemed with merchant, code, date, and time.
+- Sign out and confirm private coupon history disappears from the device UI.
 
 ### Shop owner
 
@@ -227,6 +252,11 @@ xcodebuild -exportArchive \
 - Edit, deactivate, reactivate, and delete an owned deal.
 - Confirm the owner cannot modify deals belonging to another account.
 - Confirm redemption totals update after shopper redemption.
+- Confirm Basic prevents creation or reactivation beyond 3 active deals.
+- Open Business, compare plans, and verify Pro and Enterprise analytics previews.
+- Confirm Enterprise exposes multiple-location management.
+- Test Premium Placement, Advertising, and Done-for-you selections.
+- Confirm the Business screen Dashboard button returns to the merchant dashboard.
 
 ### Location and notifications
 
