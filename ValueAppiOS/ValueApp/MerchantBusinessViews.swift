@@ -5,6 +5,11 @@ struct MerchantBusinessView: View {
     @State private var draft = MerchantSubscription.basic
     @State private var showingPlans = false
     @State private var showingLocation = false
+    let showDashboard: () -> Void
+
+    init(showDashboard: @escaping () -> Void = {}) {
+        self.showDashboard = showDashboard
+    }
 
     var body: some View {
         List {
@@ -52,6 +57,11 @@ struct MerchantBusinessView: View {
             }
         }
         .navigationTitle("Business")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Dashboard", systemImage: "chevron.left") { showDashboard() }
+            }
+        }
         .task { draft = store.merchantSubscription; await store.refreshMerchantBusiness(); draft = store.merchantSubscription }
         .onChange(of: store.merchantSubscription.tier) { _, _ in draft = store.merchantSubscription }
         .sheet(isPresented: $showingPlans) { MerchantPlansView(subscription: $draft) }

@@ -128,7 +128,7 @@ private struct MerchantTabs: View {
             NavigationStack { RedemptionHistory() }
                 .tabItem { Label("Redemptions", systemImage: "checkmark.seal.fill") }
                 .tag(MerchantTab.redemptions)
-            NavigationStack { MerchantBusinessView() }
+            NavigationStack { MerchantBusinessView(showDashboard: { selectedTab = .dashboard }) }
                 .tabItem { Label("Business", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(MerchantTab.business)
             NavigationStack { AccountProfileView(showLocationSettings: false) }
