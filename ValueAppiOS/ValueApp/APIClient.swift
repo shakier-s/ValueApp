@@ -36,6 +36,7 @@ actor APIClient {
         try await request("/v1/merchant/subscription", method: "PUT", body: subscription)
     }
     func merchantAnalytics() async throws -> MerchantAnalytics { try await request("/v1/merchant/analytics") }
+    func merchantRedemptions() async throws -> [Voucher] { try await request("/v1/merchant/redemptions") }
     func vouchers() async throws -> [Voucher] { try await request("/v1/vouchers") }
 
     func saveVoucher(dealID: UUID) async throws -> Voucher {

@@ -103,8 +103,11 @@ struct CreateDealView: View {
 
 struct RedemptionHistory: View {
     @EnvironmentObject private var store: DealStore
-    var redeemed: [Voucher] { store.vouchers.filter { $0.status == .redeemed } }
+    var redeemed: [Voucher] { store.merchantRedemptions }
     var body: some View {
-        Group { if redeemed.isEmpty { ContentUnavailableView("No redemptions yet", systemImage: "checkmark.seal", description: Text("Redeemed customer coupons will appear here.")) } else { List(redeemed) { voucher in VStack(alignment: .leading, spacing: 5) { Text(voucher.code).font(.headline.monospaced()); if let deal = store.deals.first(where: { $0.id == voucher.dealID }) { Text(deal.title) }; if let date = voucher.redeemedAt { Text(date.formatted()).font(.caption).foregroundStyle(.secondary) } } } } }.navigationTitle("Redemptions")
+        Group { if redeemed.isEmpty { ContentUnavailableView("No redemptions yet", systemImage: "checkmark.seal", description: Text("Redeemed customer coupons will appear here.")) } else { List(redeemed) { voucher in VStack(alignment: .leading, spacing: 5) { Text(voucher.code).font(.headline.monospaced()); if let deal = store.deals.first(where: { $0.id == voucher.dealID }) { Text(deal.title) }; if let date = voucher.redeemedAt { Text(date.formatted()).font(.caption).foregroundStyle(.secondary) } } } } }
+            .navigationTitle("Redemptions")
+            .task { await store.refreshMerchantBusiness() }
+            .refreshable { await store.refreshMerchantBusiness() }
     }
 }

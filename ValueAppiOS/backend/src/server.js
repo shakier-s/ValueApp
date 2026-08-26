@@ -151,6 +151,13 @@ app.get("/v1/merchant/analytics", asyncRoute(async (req, res) => {
   res.json({ ...totals.rows[0], couponsSaved: saved, conversionRate: saved ? totals.rows[0].redemptions / saved : 0, topDeals: topDeals.rows });
 }));
 
+app.get("/v1/merchant/redemptions", asyncRoute(async (req, res) => {
+  const owner = await identity(req, "merchant");
+  if (!owner) return res.status(401).json({ error: "Sign in as a shop owner." });
+  const { rows } = await pool.query(`SELECT v.id,v.deal_id AS "dealID",v.code,v.saved_at AS "savedAt",v.redeemed_at AS "redeemedAt",v.status FROM vouchers v JOIN deals d ON d.id=v.deal_id JOIN merchants m ON m.id=d.merchant_id WHERE m.owner_id=$1 AND v.status='Redeemed' ORDER BY v.redeemed_at DESC`, [owner]);
+  res.json(rows);
+}));
+
 app.get("/v1/merchant/deals", asyncRoute(async (req, res) => {
   const owner = await identity(req, "merchant");
   if (!owner) return res.status(401).json({ error: "x-user-id required" });

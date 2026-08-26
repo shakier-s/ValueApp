@@ -5,6 +5,7 @@ import Foundation
 final class DealStore: ObservableObject {
     @Published var deals: [Deal] = [] { didSet { persist() } }
     @Published var vouchers: [Voucher] = [] { didSet { persist() } }
+    @Published var merchantRedemptions: [Voucher] = []
     @Published var favourites = Set<UUID>()
     @Published private(set) var isCloudConnected = false
     @Published var merchantSubscription = MerchantSubscription.basic
@@ -119,8 +120,10 @@ final class DealStore: ObservableObject {
         do {
             async let subscription = APIClient.shared.merchantSubscription()
             async let analytics = APIClient.shared.merchantAnalytics()
+            async let redemptions = APIClient.shared.merchantRedemptions()
             merchantSubscription = try await subscription
             merchantAnalytics = try await analytics
+            merchantRedemptions = try await redemptions
         } catch { }
     }
 
@@ -161,6 +164,7 @@ final class DealStore: ObservableObject {
 
     func resetForGuest() {
         vouchers = []
+        merchantRedemptions = []
         deals.removeAll { $0.isOwned == true }
     }
 
