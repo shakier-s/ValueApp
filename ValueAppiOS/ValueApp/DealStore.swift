@@ -7,6 +7,9 @@ final class DealStore: ObservableObject {
     @Published var vouchers: [Voucher] = [] { didSet { persist() } }
     @Published var favourites = Set<UUID>()
     @Published private(set) var isCloudConnected = false
+    @Published var merchantSubscription = MerchantSubscription.basic
+    @Published var merchantAnalytics: MerchantAnalytics?
+    @Published var merchantMessage: String?
 
     private let dealsKey = "valueapp.deals.v2"
     private let vouchersKey = "valueapp.vouchers.v2"
@@ -22,6 +25,11 @@ final class DealStore: ObservableObject {
 
     var activeDeals: [Deal] { deals.filter { $0.isActive && $0.expiry > .now && $0.redeemed < $0.quantity } }
     var merchantDeals: [Deal] { deals.filter { $0.isOwned == true } }
+    var canCreateDeal: Bool {
+        let effectiveTier = merchantSubscription.status == "active" ? merchantSubscription.tier : .basic
+        guard let limit = effectiveTier.activeDealLimit else { return true }
+        return merchantDeals.filter(\.isActive).count < limit
+    }
 
     func coupons(for deal: Deal) -> [Voucher] {
         vouchers
@@ -80,6 +88,10 @@ final class DealStore: ObservableObject {
     }
 
     func create(_ deal: Deal) {
+        guard canCreateDeal else {
+            merchantMessage = "Basic includes up to 3 active deals. Upgrade to Pro for unlimited deals."
+            return
+        }
         var ownedDeal = deal
         ownedDeal.isOwned = true
         deals.insert(ownedDeal, at: 0)
@@ -90,6 +102,26 @@ final class DealStore: ObservableObject {
                 isCloudConnected = true
             }
         }
+    }
+
+    func updateSubscription(_ subscription: MerchantSubscription) async -> Bool {
+        do {
+            merchantSubscription = try await APIClient.shared.updateMerchantSubscription(subscription)
+            merchantMessage = "Your merchant services have been updated."
+            await refreshMerchantBusiness()
+            return true
+        } catch let error as APIError { merchantMessage = error.message }
+        catch { merchantMessage = "Unable to update merchant services." }
+        return false
+    }
+
+    func refreshMerchantBusiness() async {
+        do {
+            async let subscription = APIClient.shared.merchantSubscription()
+            async let analytics = APIClient.shared.merchantAnalytics()
+            merchantSubscription = try await subscription
+            merchantAnalytics = try await analytics
+        } catch { }
     }
 
     func update(_ deal: Deal) {
@@ -122,6 +154,7 @@ final class DealStore: ObservableObject {
             deals = newOwnedDeals + newDeals.filter { publicDeal in !newOwnedDeals.contains(where: { $0.id == publicDeal.id }) }
             vouchers = newVouchers
             isCloudConnected = true
+            await refreshMerchantBusiness()
         } catch { isCloudConnected = false }
     }
 

@@ -71,6 +71,7 @@ struct CreateDealView: View {
     @State private var expiry = Calendar.current.date(byAdding: .day, value: 14, to: .now)!
     @State private var quantity = 50
     @State private var created = false
+    @State private var showingLimit = false
     let showMyDeals: () -> Void
 
     init(showMyDeals: @escaping () -> Void = {}) {
@@ -81,7 +82,8 @@ struct CreateDealView: View {
         Form {
             Section("Offer") { TextField("Store name", text: $merchant); TextField("Deal title", text: $title); TextField("Describe the terms", text: $detail, axis: .vertical).lineLimit(3...6); Picker("Deal type", selection: $type) { ForEach(DealType.allCases) { Text($0.rawValue).tag($0) } }; if type != .buyOneGetOne { HStack { Text(type == .percentage ? "Discount %" : "Amount (R)"); Spacer(); TextField("Value", value: $value, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) } } }
             Section("Availability") { Picker("Category", selection: $category) { ForEach(["Restaurants", "Groceries", "Cafés", "Health", "Retail"], id: \.self) { Text($0) } }; DatePicker("Expires", selection: $expiry, in: Date.now..., displayedComponents: .date); Stepper("\(quantity) coupons", value: $quantity, in: 1...10_000); Button(proximity.location == nil ? "Use current shop location" : "Current shop location added", systemImage: "mappin.and.ellipse") { proximity.enableLocation() } }
-            Section { Button("Publish deal") { store.create(Deal(merchant: merchant, title: title, detail: detail, type: type, value: type == .buyOneGetOne ? 100 : value, category: category, distance: 0, latitude: proximity.location?.coordinate.latitude, longitude: proximity.location?.coordinate.longitude, expiry: expiry, quantity: quantity)); title = ""; detail = ""; created = true }.disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || detail.trimmingCharacters(in: .whitespaces).isEmpty) }
+            if !store.canCreateDeal { Section { Label("Basic allows up to 3 active deals. Deactivate a deal or upgrade to Pro for unlimited deals.", systemImage: "info.circle.fill").foregroundStyle(Color.valuePurple) } }
+            Section { Button("Publish deal") { guard store.canCreateDeal else { showingLimit = true; return }; store.create(Deal(merchant: merchant, title: title, detail: detail, type: type, value: type == .buyOneGetOne ? 100 : value, category: category, distance: 0, latitude: proximity.location?.coordinate.latitude, longitude: proximity.location?.coordinate.longitude, expiry: expiry, quantity: quantity)); title = ""; detail = ""; created = true }.disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || detail.trimmingCharacters(in: .whitespaces).isEmpty) }
         }
         .navigationTitle("Create a deal")
         .toolbar {
@@ -95,6 +97,7 @@ struct CreateDealView: View {
         } message: {
             Text("Your offer is now available to nearby shoppers. You can open it from My Deals to edit it.")
         }
+        .alert("Active deal limit reached", isPresented: $showingLimit) { Button("OK", role: .cancel) {} } message: { Text("Basic includes 3 active deals. Upgrade from the Business tab for unlimited deals.") }
     }
 }
 

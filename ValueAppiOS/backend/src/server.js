@@ -49,7 +49,7 @@ const dealSelect = `
   SELECT d.id, m.name AS merchant, d.title, d.detail, d.deal_type AS type,
     d.value::float8 AS value, d.category, d.distance::float8 AS distance,
     d.latitude, d.longitude,
-    d.expiry, d.quantity, d.redeemed, d.is_active AS "isActive"
+    d.expiry, d.quantity, d.redeemed, d.is_active AS "isActive", m.premium_placement AS "isFeatured"
   FROM deals d JOIN merchants m ON m.id = d.merchant_id`;
 
 app.get("/health", asyncRoute(async (_req, res) => {
@@ -114,8 +114,41 @@ app.patch("/v1/profile/password", asyncRoute(async (req, res) => {
 }));
 
 app.get("/v1/deals", asyncRoute(async (_req, res) => {
-  const { rows } = await pool.query(`${dealSelect} WHERE d.is_active AND d.expiry > now() AND d.redeemed < d.quantity ORDER BY d.created_at DESC`);
+  const { rows } = await pool.query(`${dealSelect} WHERE d.is_active AND d.expiry > now() AND d.redeemed < d.quantity ORDER BY m.premium_placement DESC, d.created_at DESC`);
   res.json(rows);
+}));
+
+app.get("/v1/merchant/subscription", asyncRoute(async (req, res) => {
+  const owner = await identity(req, "merchant");
+  if (!owner) return res.status(401).json({ error: "Sign in as a shop owner." });
+  const { rows } = await pool.query(`SELECT subscription_tier AS tier,subscription_status AS status,premium_placement AS "premiumPlacement",advertising,done_for_you AS "doneForYou",locations FROM merchants WHERE owner_id=$1`, [owner]);
+  res.json(rows[0] || { tier: "Basic", status: "active", premiumPlacement: false, advertising: false, doneForYou: false, locations: [] });
+}));
+
+app.put("/v1/merchant/subscription", asyncRoute(async (req, res) => {
+  const owner = await identity(req, "merchant");
+  if (!owner) return res.status(401).json({ error: "Sign in as a shop owner." });
+  const tier = String(req.body.tier || "Basic");
+  if (!["Basic", "Pro", "Enterprise"].includes(tier)) return res.status(400).json({ error: "Choose a valid merchant plan." });
+  const locations = Array.isArray(req.body.locations) ? req.body.locations.slice(0, 100).map(location => ({ id: location.id, name: String(location.name || "").slice(0, 100), address: String(location.address || "").slice(0, 250) })).filter(location => location.name && location.address) : [];
+  if (tier !== "Enterprise" && locations.length) return res.status(403).json({ error: "Multiple locations require Enterprise." });
+  const status = tier === "Basic" ? "active" : "pending";
+  await pool.query(`INSERT INTO merchants(owner_id,name,attendant_code_hash) VALUES($1,'My Store',$2) ON CONFLICT(owner_id) DO NOTHING`, [owner, hash("1234")]);
+  const { rows } = await pool.query(`UPDATE merchants SET subscription_tier=$1,subscription_status=$2,premium_placement=$3,advertising=$4,done_for_you=$5,locations=$6::jsonb WHERE owner_id=$7 RETURNING subscription_tier AS tier,subscription_status AS status,premium_placement AS "premiumPlacement",advertising,done_for_you AS "doneForYou",locations`, [tier, status, Boolean(req.body.premiumPlacement), Boolean(req.body.advertising), Boolean(req.body.doneForYou), JSON.stringify(locations), owner]);
+  res.json(rows[0]);
+}));
+
+app.get("/v1/merchant/analytics", asyncRoute(async (req, res) => {
+  const owner = await identity(req, "merchant");
+  if (!owner) return res.status(401).json({ error: "Sign in as a shop owner." });
+  const merchant = await pool.query(`SELECT id,subscription_tier,subscription_status FROM merchants WHERE owner_id=$1`, [owner]);
+  if (!merchant.rows.length) return res.json({ activeDeals: 0, totalDeals: 0, redemptions: 0, couponsSaved: 0, conversionRate: 0, topDeals: [] });
+  const id = merchant.rows[0].id;
+  const totals = await pool.query(`SELECT count(*)::int AS "totalDeals",count(*) FILTER (WHERE is_active)::int AS "activeDeals",coalesce(sum(redeemed),0)::int AS redemptions FROM deals WHERE merchant_id=$1`, [id]);
+  const couponTotal = await pool.query(`SELECT count(*)::int AS saved FROM vouchers v JOIN deals d ON d.id=v.deal_id WHERE d.merchant_id=$1`, [id]);
+  const topDeals = await pool.query(`SELECT d.id,d.title,count(v.id)::int AS saved,count(v.id) FILTER (WHERE v.status='Redeemed')::int AS redeemed FROM deals d LEFT JOIN vouchers v ON v.deal_id=d.id WHERE d.merchant_id=$1 GROUP BY d.id,d.title ORDER BY redeemed DESC,saved DESC LIMIT 10`, [id]);
+  const saved = couponTotal.rows[0].saved;
+  res.json({ ...totals.rows[0], couponsSaved: saved, conversionRate: saved ? totals.rows[0].redemptions / saved : 0, topDeals: topDeals.rows });
 }));
 
 app.get("/v1/merchant/deals", asyncRoute(async (req, res) => {
@@ -141,6 +174,9 @@ app.post("/v1/deals", asyncRoute(async (req, res) => {
   try {
     await client.query("BEGIN");
     const merchantResult = await client.query(`INSERT INTO merchants(owner_id,name,attendant_code_hash) VALUES($1,$2,$3) ON CONFLICT(owner_id) DO UPDATE SET name=EXCLUDED.name RETURNING id`, [owner, merchant, hash("1234")]);
+    const entitlement = await client.query(`SELECT subscription_tier,subscription_status,(SELECT count(*)::int FROM deals WHERE merchant_id=merchants.id AND is_active) AS active_count FROM merchants WHERE id=$1 FOR UPDATE`, [merchantResult.rows[0].id]);
+    const hasUnlimitedDeals = entitlement.rows[0].subscription_status === "active" && ["Pro", "Enterprise"].includes(entitlement.rows[0].subscription_tier);
+    if (!hasUnlimitedDeals && entitlement.rows[0].active_count >= 3) { await client.query("ROLLBACK"); return res.status(409).json({ error: "Basic includes up to 3 active deals. Upgrade to Pro for unlimited deals." }); }
     const result = await client.query(`INSERT INTO deals(merchant_id,title,detail,deal_type,value,category,expiry,quantity,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, [merchantResult.rows[0].id, title, detail, type, value, category, expiry, quantity, latitude || null, longitude || null]);
     await client.query("COMMIT");
     const { rows } = await pool.query(`${dealSelect} WHERE d.id=$1`, [result.rows[0].id]);
@@ -150,6 +186,11 @@ app.post("/v1/deals", asyncRoute(async (req, res) => {
 
 app.patch("/v1/deals/:id/status", asyncRoute(async (req, res) => {
   const owner = await identity(req, "merchant");
+  if (Boolean(req.body.isActive)) {
+    const entitlement = await pool.query(`SELECT subscription_tier,subscription_status,(SELECT count(*)::int FROM deals d JOIN merchants owned ON owned.id=d.merchant_id WHERE owned.owner_id=$1 AND d.is_active) AS active_count FROM merchants WHERE owner_id=$1`, [owner]);
+    const hasUnlimitedDeals = entitlement.rows.length && entitlement.rows[0].subscription_status === "active" && ["Pro", "Enterprise"].includes(entitlement.rows[0].subscription_tier);
+    if (!hasUnlimitedDeals && entitlement.rows[0]?.active_count >= 3) return res.status(409).json({ error: "Basic includes up to 3 active deals." });
+  }
   const result = await pool.query(`UPDATE deals d SET is_active=$1 FROM merchants m WHERE d.id=$2 AND d.merchant_id=m.id AND m.owner_id=$3 RETURNING d.id`, [Boolean(req.body.isActive), req.params.id, owner]);
   if (!result.rowCount) return res.status(404).json({ error: "deal not found" });
   res.json({ ok: true });

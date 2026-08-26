@@ -47,7 +47,7 @@ struct DiscoverView: View {
                 Text("Welcome, \(welcomeName)")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.valuePurple)
-                Text("Good deals, nearby").font(.largeTitle.bold())
+                Text("ValueApp").font(.largeTitle.bold())
                 Button { proximity.enableLocation() } label: { Label(proximity.location == nil ? "Use my location" : "Using your location", systemImage: "location.fill").font(.subheadline).foregroundStyle(.secondary) }
             }
             Spacer(); Button { showingRolePicker = true } label: { Image(systemName: "storefront.fill").padding(12).background(.white).clipShape(Circle()).shadow(color: .black.opacity(0.08), radius: 8) }.accessibilityLabel("Switch account type")
@@ -67,7 +67,10 @@ struct DealCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 Image(systemName: deal.type.symbol).font(.title2.bold()).foregroundStyle(.white).frame(width: 54, height: 54).background(LinearGradient(colors: [.valuePurple, .valueCoral], startPoint: .topLeading, endPoint: .bottomTrailing)).clipShape(RoundedRectangle(cornerRadius: 16))
-                VStack(alignment: .leading, spacing: 4) { Text(deal.merchant).font(.subheadline).foregroundStyle(.secondary); Text(deal.title).font(.headline).foregroundStyle(.primary).lineLimit(2) }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack { Text(deal.merchant).font(.subheadline).foregroundStyle(.secondary); if deal.isFeatured == true { Label("Featured", systemImage: "star.fill").font(.caption2.bold()).foregroundStyle(Color.valueCoral) } }
+                    Text(deal.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
+                }
                 Spacer()
             }
             HStack { Text(deal.offerText).font(.caption.bold()).foregroundStyle(Color.valuePurple).padding(.horizontal, 10).padding(.vertical, 7).background(Color.valuePurple.opacity(0.1)).clipShape(Capsule()); Spacer(); Label(String(format: "%.1f km", deal.distance), systemImage: "location").font(.caption).foregroundStyle(.secondary) }

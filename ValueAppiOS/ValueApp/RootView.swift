@@ -114,7 +114,7 @@ private struct MerchantTabs: View {
     @State private var selectedTab = MerchantTab.dashboard
 
     private enum MerchantTab: Hashable {
-        case dashboard, create, redemptions, profile
+        case dashboard, create, redemptions, business, profile
     }
 
     var body: some View {
@@ -128,6 +128,9 @@ private struct MerchantTabs: View {
             NavigationStack { RedemptionHistory() }
                 .tabItem { Label("Redemptions", systemImage: "checkmark.seal.fill") }
                 .tag(MerchantTab.redemptions)
+            NavigationStack { MerchantBusinessView() }
+                .tabItem { Label("Business", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(MerchantTab.business)
             NavigationStack { AccountProfileView(showLocationSettings: false) }
                 .tabItem { Label("Profile", systemImage: "person.fill") }
                 .tag(MerchantTab.profile)

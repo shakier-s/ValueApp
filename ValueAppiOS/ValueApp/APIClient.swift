@@ -31,6 +31,11 @@ actor APIClient {
         let _: APIResult = try await request("/v1/profile/password", method: "PATCH", body: ["currentPassword": currentPassword, "newPassword": newPassword])
     }
     func merchantDeals() async throws -> [Deal] { try await request("/v1/merchant/deals") }
+    func merchantSubscription() async throws -> MerchantSubscription { try await request("/v1/merchant/subscription") }
+    func updateMerchantSubscription(_ subscription: MerchantSubscription) async throws -> MerchantSubscription {
+        try await request("/v1/merchant/subscription", method: "PUT", body: subscription)
+    }
+    func merchantAnalytics() async throws -> MerchantAnalytics { try await request("/v1/merchant/analytics") }
     func vouchers() async throws -> [Voucher] { try await request("/v1/vouchers") }
 
     func saveVoucher(dealID: UUID) async throws -> Voucher {

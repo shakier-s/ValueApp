@@ -11,6 +11,8 @@ ValueApp is an iOS voucher marketplace for shoppers and local shop owners.
 - Guests can browse active deals without an account.
 - Shoppers can create an account, save vouchers, redeem them in store, and review their redeemed-voucher history.
 - Shop owners can create, edit, activate, deactivate, and delete only deals owned by their account.
+- Merchant subscriptions include Basic (3 active deals), Pro (unlimited deals and basic analytics), and Enterprise (advanced analytics, dedicated support, and multiple locations).
+- Optional merchant growth services include Premium Placement with featured listings, Advertising, and Done-for-you campaign management.
 - Supported discounts are buy-one-get-one-free, percentage off, and fixed South African rand amounts.
 - Location is optional and is used to calculate nearby deals.
 - Shoppers can optionally receive notifications about nearby offers.
@@ -114,6 +116,7 @@ Legacy `X-User-ID` support still exists in the API for old test data. Remove tha
 - `ValueApp/RootView.swift`: guest/shopper/shop-owner routing, login, registration, and tabs
 - `ValueApp/ShopperViews.swift`: discovery, deal detail, saved vouchers, redemption, and redeemed history
 - `ValueApp/MerchantViews.swift`: owner dashboard, creation, editing, deletion, and redemption metrics
+- `ValueApp/MerchantBusinessViews.swift`: subscription plans, analytics, merchant add-ons, and Enterprise locations
 - `ValueApp/DealStore.swift`: app state, persistence, API synchronization, and ownership checks
 - `ValueApp/APIClient.swift`: production API requests and authentication header
 - `ValueApp/AuthSession.swift`: authenticated user state and Keychain token management
@@ -240,4 +243,3 @@ xcodebuild -exportArchive \
 - Xcode Cloud still needs to be created in Xcode if automatic Apple builds are desired.
 - App Store review information must be updated with working shopper and shop-owner test credentials after test accounts are created.
 - Review `APP_STORE_SUBMISSION.md`; some older wording describes the pre-login prototype and must be refreshed before submission.
-
